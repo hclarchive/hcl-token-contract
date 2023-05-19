@@ -1,1 +1,1 @@
-# hcl-token-contract
+# HCL Token Contract
