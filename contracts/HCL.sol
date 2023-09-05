@@ -9,7 +9,7 @@ contract HCL is ERC20, Ownable {
 	/**
 	* @dev Total Supply
 	*/ 
-	uint256 private constant TOTAL_SUPPLY = 2500000000;
+	uint256 private constant TOTAL_SUPPLY = 2_500_000_000;
 
 	/**
 	* @dev Constructor
@@ -29,6 +29,11 @@ contract HCL is ERC20, Ownable {
 		string role;
 		bool isSet;
 	}
+
+	/**
+	* @dev Allocation Event
+	*/
+	event SetAllocation(address account, uint256 amount, string role);
 	
 	/**
 	* @dev List of Registered allocation
@@ -53,12 +58,13 @@ contract HCL is ERC20, Ownable {
 		address owner = _msgSender();
 		
 		require(balanceOf(owner) >= amount, "HCL: allocation amount exceeds balance");
-		require(_allocations[account].isSet != true, "HCL: already registered allocation address");
+		require(!_allocations[account].isSet, "HCL: already registered allocation address");
 		
 		_allocations[account] = Allocation(account, amount, role, true);
 		_allocationAddresses.push(account);
 
-		transfer(account, amount);
+		emit SetAllocation(account, amount, role);
+		_transfer(owner, account, amount);
 	}
 
 	/**
@@ -98,7 +104,14 @@ contract HCL is ERC20, Ownable {
 		string role;
 		bool isSet;
 	}
-	
+
+
+	/**
+	* @dev Vesting Event
+	*/
+	event SetVesting(address account, uint256 amount, uint256 start, uint256[] timelock);
+
+
 	/**
 	 * @dev List of Registered vesting
 	 */ 
@@ -108,7 +121,20 @@ contract HCL is ERC20, Ownable {
 	 * @dev Array of Registerd vesting address
 	 */ 
 	address[] private _vestingAddresses;
-
+	
+	function _timeValidator(uint256[] memory timelock) internal view returns (bool)
+	{
+		for (uint i = 0; i < timelock.length; i++) 
+		{
+			if(timelock[i] < block.timestamp)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
 	/**
 	 * @dev Set Vesting
 	 * @param account The address to be vested
@@ -123,15 +149,19 @@ contract HCL is ERC20, Ownable {
 		/**
 		* @dev Only addresses registered in '_allocation' are permitted to execute.
 		*/
-		require(_allocations[owner].isSet == true, "HCL: address is not registered in allocation ");
+		require(_allocations[owner].isSet, "HCL: address is not registered in allocation ");
 		require(balanceOf(owner) >= amount, "HCL: vesting amount exceeds balance");
 		
-		require(_vestings[account].isSet != true, "HCL: already registered in vesting");
-
+		require(!_vestings[account].isSet, "HCL: already registered in vesting");
+		require(start >= block.timestamp, "HCL: start date can not be set to a past date");
+		require(_timeValidator(timelock), "HCL: timelock can not be set to a past date");
+		
+		
 		_vestings[account] = Vesting(account, amount, start, timelock, _allocations[owner].role, true);
 		_vestingAddresses.push(account);
 
-		transfer(account, amount);
+		emit SetVesting(account, amount, start, timelock);
+		_transfer(owner, account, amount);
 	}
 
 	/**
@@ -159,6 +189,34 @@ contract HCL is ERC20, Ownable {
 		return vestings;
 	}
 	
+	function _editableVestingDate(address account) internal view returns (bool)
+	{
+		if(!_vestings[account].isSet)
+		{
+			return false;
+		}
+		
+		if(_vestings[account].start < block.timestamp)
+		{
+			return false;
+		}
+		
+		for (uint i = 0; i < _vestings[account].timelock.length; i++) 
+		{
+			if(_vestings[account].timelock[i] < block.timestamp)
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+
+	/**
+	* @dev Vesting Changed Event
+	*/
+	event ChangeVestingDate(address account, uint256 start, uint256[] timelock);
+	
 	/**
 	 * @dev Change Vesting start date
 	 * @param account The vested adddress
@@ -169,8 +227,13 @@ contract HCL is ERC20, Ownable {
 	{
 		address owner = _msgSender();
 
-		require(_allocations[owner].isSet == true, "HCL: address is not registered in allocation ");
-		require(_vestings[account].isSet == true, "HCL: account is not registered in vesting");
+		require(_allocations[owner].isSet, "HCL: address is not registered in allocation ");
+		require(_vestings[account].isSet, "HCL: account is not registered in vesting");
+		require(start >= block.timestamp, "HCL: start date can not be set to a past date");
+		require(_timeValidator(timelock), "HCL: timelock can not be set to a past date");
+		require(_editableVestingDate(account), "HCL: this vesting cannot be changed");
+		
+		emit ChangeVestingDate(account, start, timelock);
 
 		_vestings[account].start = start;
 		_vestings[account].timelock = timelock;
@@ -183,7 +246,12 @@ contract HCL is ERC20, Ownable {
 	*/
 	function getLockedBalance(address account) public view returns (uint256) 
 	{
-		if(_vestings[account].isSet != true)
+		if(!_vestings[account].isSet)
+		{
+			return 0;
+		}
+		
+		if(_vestings[account].start > block.timestamp)
 		{
 			return 0;
 		}
