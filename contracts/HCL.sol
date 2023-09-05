@@ -14,7 +14,7 @@ contract HCL is ERC20, Ownable {
 	/**
 	* @dev Constructor
 	*/ 
-	constructor() ERC20('Hiwkcircle', 'HCL') 
+	constructor() ERC20('Hwikcircle', 'HCL') 
 	{
 		_mint(_msgSender(), TOTAL_SUPPLY*10**decimals());
 	}
