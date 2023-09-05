@@ -253,7 +253,7 @@ contract HCL is ERC20, Ownable {
 		
 		if(_vestings[account].start > block.timestamp)
 		{
-			return 0;
+			return _vestings[account].amount;
 		}
 		
 		uint256 per = _vestings[account].amount / _vestings[account].timelock.length;
